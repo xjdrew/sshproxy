@@ -1,7 +1,5 @@
 # 二进制文件
 bin/
-sshhook
-containerssh
 
 # SSH 密钥文件（敏感）
 ssh_host_rsa_key
