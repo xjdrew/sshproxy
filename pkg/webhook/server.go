@@ -206,6 +206,21 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 获取集群配置
+	clusterName := user.Metadata["KUBERNETES_CLUSTER"]
+	if clusterName == "" {
+		log.Printf("[Config] Missing cluster name for user: %s", req.AuthenticatedUsername)
+		http.Error(w, "Missing cluster configuration", http.StatusBadRequest)
+		return
+	}
+
+	cluster := s.config.GetCluster(clusterName)
+	if cluster == nil {
+		log.Printf("[Config] Cluster not found: %s", clusterName)
+		http.Error(w, "Cluster not found", http.StatusNotFound)
+		return
+	}
+
 	// 构建 Kubernetes 配置
 	podName := user.Metadata["KUBERNETES_POD_NAME"]
 	namespace := user.Metadata["KUBERNETES_POD_NAMESPACE"]
@@ -219,6 +234,26 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	// 构建 Kubernetes Pod 配置
 	kubeConfig := config.KubernetesConfig{}
+
+	// 设置集群连接信息
+	kubeConfig.Connection.Host = cluster.Host
+	kubeConfig.Connection.CAFile = cluster.CACertFile
+	kubeConfig.Connection.CertFile = cluster.CertFile
+	kubeConfig.Connection.KeyFile = cluster.KeyFile
+	if cluster.BearerTokenFile != "" {
+		kubeConfig.Connection.BearerTokenFile = cluster.BearerTokenFile
+	}
+	if cluster.ServerName != "" {
+		kubeConfig.Connection.ServerName = cluster.ServerName
+	}
+	if cluster.QPS > 0 {
+		kubeConfig.Connection.QPS = float32(cluster.QPS)
+	}
+	if cluster.Burst > 0 {
+		kubeConfig.Connection.Burst = cluster.Burst
+	}
+
+	// 设置 Pod 配置
 	kubeConfig.Pod.Metadata.Name = podName
 	kubeConfig.Pod.Metadata.Namespace = namespace
 
@@ -250,8 +285,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		Config:                          appConfig,
 	}
 
-	log.Printf("[Config] ✓ Configuration returned - namespace=%s, pod=%s, container=%s",
-		namespace, podName, containerName)
+	log.Printf("[Config] ✓ Configuration returned - cluster=%s, namespace=%s, pod=%s, container=%s",
+		clusterName, namespace, podName, containerName)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

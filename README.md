@@ -6,6 +6,7 @@
 
 - 🔐 **灵活的认证方式**：支持密码认证和 SSH 公钥认证
 - 🎯 **精确的容器映射**：每个用户可以映射到特定的 Kubernetes Pod 和容器
+- 🌐 **多集群支持**：支持配置和连接多个 Kubernetes 集群，用户可以访问不同集群的 Pod
 - 🚀 **零侵入性**：使用 ContainerSSH 的 persistent 模式，连接到已存在的 Pod，无需创建新容器
 - 📝 **详细的日志**：完整的认证和连接日志，便于调试和审计
 - 🔧 **易于配置**：简单的 YAML 配置文件，支持热重载
@@ -35,35 +36,67 @@ ssh-keygen -t rsa -b 2048 -f ssh_host_rsa_key -N "" -C "containerssh@sshproxy"
 chmod 600 ssh_host_rsa_key
 ```
 
-### 3. 配置 Kubernetes 连接
+### 3. 配置 Kubernetes 集群和用户映射
 
-编辑 `config.yaml`，配置 Kubernetes API Server 连接信息：
-
-```yaml
-kubernetes:
-  connection:
-    host: "https://your-k8s-api-server:6443"
-    cacertFile: "/path/to/ca.crt"
-    certFile: "/path/to/client.crt"
-    keyFile: "/path/to/client.key"
-```
-
-**提示**：可以从 `~/.kube/config` 中提取这些信息。
-
-### 4. 配置用户和 Pod 映射
-
-编辑 `webhook.yaml`，添加用户和对应的容器映射：
+编辑 `webhook.yaml`，配置 Kubernetes 集群连接信息和用户映射：
 
 ```yaml
 listen: ":8080"
 
+# Kubernetes 集群配置
+clusters:
+  # 生产集群
+  - name: "prod-cluster"
+    host: "https://prod-k8s-api.example.com:6443"
+    cacertFile: "/path/to/prod-ca.crt"
+    certFile: "/path/to/prod-client.crt"
+    keyFile: "/path/to/prod-client.key"
+  
+  # 开发集群
+  - name: "dev-cluster"
+    host: "https://dev-k8s-api.example.com:6443"
+    cacertFile: "/path/to/dev-ca.crt"
+    certFile: "/path/to/dev-client.crt"
+    keyFile: "/path/to/dev-client.key"
+
+# 用户配置
 users:
-  - username: "developer"
-    password: "dev_password"
+  # 生产环境用户
+  - username: "prod-user"
+    password: "prod_password"
     metadata:
-      KUBERNETES_POD_NAMESPACE: "default"
+      KUBERNETES_CLUSTER: "prod-cluster"        # 指定集群
+      KUBERNETES_POD_NAMESPACE: "production"
       KUBERNETES_POD_NAME: "my-app-pod"
       KUBERNETES_CONTAINER_NAME: "app"
+  
+  # 开发环境用户
+  - username: "dev-user"
+    password: "dev_password"
+    metadata:
+      KUBERNETES_CLUSTER: "dev-cluster"         # 指定集群
+      KUBERNETES_POD_NAMESPACE: "development"
+      KUBERNETES_POD_NAME: "dev-pod"
+      KUBERNETES_CONTAINER_NAME: "app"
+```
+
+**提示**：
+- 可以从 `~/.kube/config` 中提取集群连接信息
+- 每个用户通过 `KUBERNETES_CLUSTER` 字段指定要连接的集群
+- 支持配置多个集群，用户可以访问不同集群的 Pod
+
+### 4. 简化 ContainerSSH 配置
+
+编辑 `config.yaml`，移除静态的 Kubernetes 连接配置（现在由 webhook 动态提供）：
+
+```yaml
+backend: kubernetes
+kubernetes:
+  # 注意：集群连接配置已移至 webhook.yaml 的 clusters 配置段
+  # 这样可以支持多个 Kubernetes 集群，并由 webhook 根据用户动态返回对应的集群连接信息
+  pod:
+    mode: "persistent"
+    createMissingPods: false
 ```
 
 ### 5. 构建项目
@@ -156,11 +189,22 @@ sshproxy/
 详细的配置说明请参考 `webhook.yaml` 文件中的注释。主要配置项：
 
 - **listen**: Webhook 服务监听地址
+- **clusters**: Kubernetes 集群配置列表（支持多集群）
+  - **name**: 集群名称（唯一标识）
+  - **host**: Kubernetes API Server 地址
+  - **cacertFile**: CA 证书文件路径
+  - **certFile**: 客户端证书文件路径
+  - **keyFile**: 客户端密钥文件路径
+  - **bearerTokenFile**: Bearer Token 文件路径（可选）
+  - **serverName**: TLS 服务器名称（可选）
+  - **qps**: QPS 限制（可选）
+  - **burst**: Burst 限制（可选）
 - **users**: 用户列表
   - **username**: SSH 用户名
   - **password**: 密码（可选）
   - **publicKey**: SSH 公钥（可选）
   - **metadata**: Pod 映射信息
+    - **KUBERNETES_CLUSTER**: 集群名称（必须，对应 clusters 中的 name）
     - **KUBERNETES_POD_NAMESPACE**: Pod 所在的 namespace
     - **KUBERNETES_POD_NAME**: Pod 名称
     - **KUBERNETES_CONTAINER_NAME**: 容器名称（可选）
@@ -176,6 +220,7 @@ users:
   - username: "user1"
     password: "secure_password"
     metadata:
+      KUBERNETES_CLUSTER: "prod-cluster"        # 指定集群
       KUBERNETES_POD_NAMESPACE: "default"
       KUBERNETES_POD_NAME: "my-pod"
 ```
@@ -202,6 +247,7 @@ users:
   - username: "user1"
     publicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user@host"
     metadata:
+      KUBERNETES_CLUSTER: "prod-cluster"        # 指定集群
       KUBERNETES_POD_NAMESPACE: "default"
       KUBERNETES_POD_NAME: "my-pod"
 ```
@@ -210,6 +256,94 @@ users:
 
 ```bash
 ssh -i ~/.ssh/sshproxy_key user1@your-server -p 2222
+```
+
+## 🌐 多集群支持
+
+### 配置多个集群
+
+在 `webhook.yaml` 中配置多个 Kubernetes 集群：
+
+```yaml
+clusters:
+  - name: "prod-cluster"
+    host: "https://prod-api.example.com:6443"
+    cacertFile: "/path/to/prod-ca.crt"
+    certFile: "/path/to/prod-client.crt"
+    keyFile: "/path/to/prod-client.key"
+  
+  - name: "staging-cluster"
+    host: "https://staging-api.example.com:6443"
+    cacertFile: "/path/to/staging-ca.crt"
+    certFile: "/path/to/staging-client.crt"
+    keyFile: "/path/to/staging-client.key"
+  
+  - name: "dev-cluster"
+    host: "https://dev-api.example.com:6443"
+    cacertFile: "/path/to/dev-ca.crt"
+    certFile: "/path/to/dev-client.crt"
+    keyFile: "/path/to/dev-client.key"
+```
+
+### 为用户分配集群
+
+每个用户通过 `KUBERNETES_CLUSTER` 元数据字段指定要连接的集群：
+
+```yaml
+users:
+  # 生产环境运维人员
+  - username: "ops-prod"
+    password: "ops_password"
+    metadata:
+      KUBERNETES_CLUSTER: "prod-cluster"
+      KUBERNETES_POD_NAMESPACE: "kube-system"
+      KUBERNETES_POD_NAME: "monitoring-pod"
+  
+  # 测试环境开发人员
+  - username: "dev-staging"
+    password: "dev_password"
+    metadata:
+      KUBERNETES_CLUSTER: "staging-cluster"
+      KUBERNETES_POD_NAMESPACE: "testing"
+      KUBERNETES_POD_NAME: "test-pod"
+  
+  # 开发环境开发人员
+  - username: "dev-local"
+    password: "dev_password"
+    metadata:
+      KUBERNETES_CLUSTER: "dev-cluster"
+      KUBERNETES_POD_NAMESPACE: "development"
+      KUBERNETES_POD_NAME: "dev-pod"
+```
+
+### 工作原理
+
+1. 用户通过 SSH 连接到服务
+2. Webhook 服务根据用户名查找配置
+3. 从用户的 metadata 中获取 `KUBERNETES_CLUSTER` 字段
+4. 在 clusters 配置中查找对应集群的连接信息
+5. 动态返回该集群的连接配置给 ContainerSSH
+6. ContainerSSH 使用返回的配置连接到指定集群的 Pod
+
+### 从 kubeconfig 提取集群信息
+
+可以使用以下命令从 kubeconfig 文件中提取集群连接信息：
+
+```bash
+# 查看 kubeconfig 内容
+kubectl config view --flatten --minify
+
+# 提取 CA 证书
+kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ca.crt
+
+# 提取客户端证书
+kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d > client.crt
+
+# 提取客户端密钥
+kubectl config view --raw -o jsonpath='{.users[0].user.client-key-data}' | base64 -d > client.key
+
+# 获取 API Server 地址
+kubectl config view --raw -o jsonpath='{.clusters[0].cluster.server}'
 ```
 
 ## 🧪 开发和测试

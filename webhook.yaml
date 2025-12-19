@@ -4,29 +4,61 @@
 # Webhook 服务监听地址
 listen: ":8080"
 
+# ==================== Kubernetes 集群配置 ====================
+# 配置多个 Kubernetes 集群的连接信息
+clusters:
+  # 生产集群示例
+  - name: "prod-cluster"
+    host: "https://prod-k8s-api.example.com:6443"
+    cacertFile: "/path/to/prod-ca.crt"
+    certFile: "/path/to/prod-client.crt"
+    keyFile: "/path/to/prod-client.key"
+    # 可选配置
+    # bearerTokenFile: "/path/to/token"
+    # serverName: "kubernetes.default.svc"
+    # qps: 5
+    # burst: 10
+  
+  # 开发集群示例
+  - name: "dev-cluster"
+    host: "https://dev-k8s-api.example.com:6443"
+    cacertFile: "/path/to/dev-ca.crt"
+    certFile: "/path/to/dev-client.crt"
+    keyFile: "/path/to/dev-client.key"
+  
+  # 测试集群示例
+  - name: "test-cluster"
+    host: "https://test-k8s-api.example.com:6443"
+    cacertFile: "/path/to/test-ca.crt"
+    certFile: "/path/to/test-client.crt"
+    keyFile: "/path/to/test-client.key"
+
 # 用户配置列表
 # 每个用户定义了 SSH 登录凭据和对应的 Kubernetes Pod 映射
 users:
-  # ==================== 示例用户 1：密码认证 ====================
-  - username: "user1"
+  # ==================== 示例用户 1：生产集群用户 ====================
+  - username: "prod-user"
     # 密码（生产环境建议使用更强的密码）
     password: "change_me_password1"
     
     # Kubernetes Pod 映射信息
     # 这些信息会在认证成功后传递给 ContainerSSH
     metadata:
+      # 集群名称（必须）- 指定要连接的集群
+      KUBERNETES_CLUSTER: "prod-cluster"
+      
       # Pod 所在的 namespace
-      KUBERNETES_POD_NAMESPACE: "default"
+      KUBERNETES_POD_NAMESPACE: "production"
       
       # Pod 名称（支持精确名称或模式匹配）
       KUBERNETES_POD_NAME: "my-app-pod"
       
       # 容器名称（如果 pod 有多个容器，需要指定）
       # 留空表示连接到 pod 的第一个容器
-      KUBERNETES_CONTAINER_NAME: ""
+      KUBERNETES_CONTAINER_NAME: "app"
 
-  # ==================== 示例用户 2：公钥认证 ====================
-  - username: "user2"
+  # ==================== 示例用户 2：开发集群用户（公钥认证） ====================
+  - username: "dev-user"
     # 可选：同时支持密码和公钥认证
     password: "change_me_password2"
     
@@ -36,24 +68,27 @@ users:
     publicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... user@example.com"
     
     metadata:
-      KUBERNETES_POD_NAMESPACE: "production"
-      KUBERNETES_POD_NAME: "web-server-deployment-abc123"
-      KUBERNETES_CONTAINER_NAME: "nginx"
-
-  # ==================== 示例用户 3：开发环境 ====================
-  - username: "developer"
-    password: "dev_password"
-    metadata:
+      KUBERNETES_CLUSTER: "dev-cluster"
       KUBERNETES_POD_NAMESPACE: "development"
       KUBERNETES_POD_NAME: "dev-environment"
       KUBERNETES_CONTAINER_NAME: "workspace"
 
-  # ==================== 示例用户 4：运维人员 ====================
-  - username: "ops"
+  # ==================== 示例用户 3：测试集群用户 ====================
+  - username: "test-user"
+    password: "test_password"
+    metadata:
+      KUBERNETES_CLUSTER: "test-cluster"
+      KUBERNETES_POD_NAMESPACE: "testing"
+      KUBERNETES_POD_NAME: "test-pod"
+      KUBERNETES_CONTAINER_NAME: "test-container"
+
+  # ==================== 示例用户 4：运维人员（多集群访问） ====================
+  - username: "ops-prod"
     password: "ops_password"
     # 支持公钥认证（更安全）
     publicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD... ops@company.com"
     metadata:
+      KUBERNETES_CLUSTER: "prod-cluster"
       KUBERNETES_POD_NAMESPACE: "kube-system"
       KUBERNETES_POD_NAME: "monitoring-pod"
       KUBERNETES_CONTAINER_NAME: "prometheus"
@@ -76,6 +111,7 @@ users:
 #    - 推荐用于生产环境
 #
 # 4. 元数据（metadata）：
+#    - KUBERNETES_CLUSTER: 集群名称（必须，对应 clusters 中的 name）
 #    - KUBERNETES_POD_NAMESPACE: Pod 所在的命名空间
 #    - KUBERNETES_POD_NAME: Pod 名称（必须是已存在的 pod）
 #    - KUBERNETES_CONTAINER_NAME: 容器名称（多容器 pod 时必需）
