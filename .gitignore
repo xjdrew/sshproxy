@@ -1,0 +1,40 @@
+# 二进制文件
+bin/
+sshhook
+containerssh
+
+# SSH 密钥文件（敏感）
+ssh_host_rsa_key
+ssh_host_rsa_key.pub
+
+# 本地配置文件（包含敏感信息）
+.local-*.yaml
+.local-*.crt
+.local-*.key
+
+# Go 构建产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试覆盖率
+*.out
+coverage.txt
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.log
+*.tmp
+*.bak

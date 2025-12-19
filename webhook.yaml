@@ -1,0 +1,110 @@
+# Webhook 服务配置文件
+# 用于 ContainerSSH 的认证和配置服务
+
+# Webhook 服务监听地址
+listen: ":8080"
+
+# 用户配置列表
+# 每个用户定义了 SSH 登录凭据和对应的 Kubernetes Pod 映射
+users:
+  # ==================== 示例用户 1：密码认证 ====================
+  - username: "user1"
+    # 密码（生产环境建议使用更强的密码）
+    password: "change_me_password1"
+    
+    # Kubernetes Pod 映射信息
+    # 这些信息会在认证成功后传递给 ContainerSSH
+    metadata:
+      # Pod 所在的 namespace
+      KUBERNETES_POD_NAMESPACE: "default"
+      
+      # Pod 名称（支持精确名称或模式匹配）
+      KUBERNETES_POD_NAME: "my-app-pod"
+      
+      # 容器名称（如果 pod 有多个容器，需要指定）
+      # 留空表示连接到 pod 的第一个容器
+      KUBERNETES_CONTAINER_NAME: ""
+
+  # ==================== 示例用户 2：公钥认证 ====================
+  - username: "user2"
+    # 可选：同时支持密码和公钥认证
+    password: "change_me_password2"
+    
+    # SSH 公钥（OpenSSH 格式）
+    # 生成方式：ssh-keygen -t rsa -b 2048 -f ~/.ssh/sshproxy_key
+    # 然后将 ~/.ssh/sshproxy_key.pub 的内容复制到这里
+    publicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... user@example.com"
+    
+    metadata:
+      KUBERNETES_POD_NAMESPACE: "production"
+      KUBERNETES_POD_NAME: "web-server-deployment-abc123"
+      KUBERNETES_CONTAINER_NAME: "nginx"
+
+  # ==================== 示例用户 3：开发环境 ====================
+  - username: "developer"
+    password: "dev_password"
+    metadata:
+      KUBERNETES_POD_NAMESPACE: "development"
+      KUBERNETES_POD_NAME: "dev-environment"
+      KUBERNETES_CONTAINER_NAME: "workspace"
+
+  # ==================== 示例用户 4：运维人员 ====================
+  - username: "ops"
+    password: "ops_password"
+    # 支持公钥认证（更安全）
+    publicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD... ops@company.com"
+    metadata:
+      KUBERNETES_POD_NAMESPACE: "kube-system"
+      KUBERNETES_POD_NAME: "monitoring-pod"
+      KUBERNETES_CONTAINER_NAME: "prometheus"
+
+# ==================== 配置说明 ====================
+#
+# 1. 用户名（username）：
+#    - SSH 登录时使用的用户名
+#    - 必须唯一
+#
+# 2. 密码（password）：
+#    - SSH 密码认证使用
+#    - 可选（如果只使用公钥认证）
+#    - 生产环境建议使用强密码
+#
+# 3. 公钥（publicKey）：
+#    - SSH 公钥认证使用
+#    - OpenSSH 格式（ssh-rsa、ssh-ed25519 等）
+#    - 可选（如果只使用密码认证）
+#    - 推荐用于生产环境
+#
+# 4. 元数据（metadata）：
+#    - KUBERNETES_POD_NAMESPACE: Pod 所在的命名空间
+#    - KUBERNETES_POD_NAME: Pod 名称（必须是已存在的 pod）
+#    - KUBERNETES_CONTAINER_NAME: 容器名称（多容器 pod 时必需）
+#
+# 5. 安全建议：
+#    - 生产环境使用公钥认证
+#    - 定期轮换密码
+#    - 限制用户访问权限
+#    - 使用 RBAC 控制 Kubernetes 访问
+#    - 不要将此文件提交到公共代码仓库
+#
+# 6. Pod 名称匹配：
+#    - 支持精确匹配：my-pod-name
+#    - 支持通配符：my-pod-*（需要 ContainerSSH 支持）
+#
+# ==================== 使用示例 ====================
+#
+# 1. 生成 SSH 密钥对：
+#    ssh-keygen -t rsa -b 2048 -f ~/.ssh/sshproxy_key
+#
+# 2. 配置用户公钥：
+#    将 ~/.ssh/sshproxy_key.pub 的内容复制到上面的 publicKey 字段
+#
+# 3. SSH 连接（密码认证）：
+#    ssh user1@your-server -p 2222
+#
+# 4. SSH 连接（公钥认证）：
+#    ssh -i ~/.ssh/sshproxy_key user2@your-server -p 2222
+#
+# 5. 查看 Pod 信息：
+#    kubectl get pods -n <namespace>
+#    kubectl describe pod <pod-name> -n <namespace>

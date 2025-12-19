@@ -1,0 +1,118 @@
+# ContainerSSH 配置文件
+# 文档：https://containerssh.io/reference/
+
+# SSH 服务配置
+ssh:
+  # SSH 监听地址和端口
+  listen: "0.0.0.0:2222"
+  
+  # SSH Host Key 文件列表（支持多个）
+  # 首次使用需要生成：ssh-keygen -t rsa -b 2048 -f ssh_host_rsa_key -N ""
+  hostkeys:
+    - ssh_host_rsa_key
+  
+  # 可选：SSH Banner（登录后显示的欢迎信息）
+  # banner: |
+  #   Welcome to SSH Proxy!
+  #   Powered by ContainerSSH
+
+# 认证配置
+auth:
+  # Webhook 认证服务地址
+  url: "http://localhost:8080"
+  
+  # 启用密码认证
+  password: true
+  
+  # 启用公钥认证
+  pubkey: true
+  
+  # 可选：认证超时时间
+  # timeout: 60s
+
+# 配置服务器（用于动态配置后端）
+configserver:
+  # Webhook 配置服务地址
+  url: "http://localhost:8080/config"
+  
+  # 可选：配置请求超时时间
+  # timeout: 60s
+
+# 后端类型：kubernetes
+backend: kubernetes
+
+# Kubernetes 后端配置
+kubernetes:
+  # Kubernetes API Server 连接配置
+  connection:
+    # API Server 地址
+    # 示例：https://your-k8s-api-server:6443
+    host: "YOUR_K8S_API_SERVER"
+    
+    # 方式1：使用证书认证（推荐用于生产环境）
+    cacertFile: "PATH_TO_CA_CERT"      # CA 证书文件路径
+    certFile: "PATH_TO_CLIENT_CERT"    # 客户端证书文件路径
+    keyFile: "PATH_TO_CLIENT_KEY"      # 客户端密钥文件路径
+    
+    # 方式2：使用 Bearer Token 认证（二选一）
+    # bearerTokenFile: "PATH_TO_TOKEN_FILE"
+    
+    # 方式3：使用 kubeconfig（开发环境）
+    # 可以从 ~/.kube/config 中提取相关配置
+    
+    # 可选：TLS 服务器名称（用于 SNI）
+    # serverName: "kubernetes.default.svc"
+    
+    # 可选：QPS 限制
+    # qps: 5
+    # burst: 10
+  
+  # Pod 配置
+  pod:
+    # 执行模式：
+    # - "persistent": 连接到已存在的 pod（不创建新 pod）
+    # - "connection": 为每个连接创建新 pod
+    # - "session": 为每个会话创建新 pod
+    mode: "persistent"
+    
+    # 是否创建缺失的 pod（persistent 模式下应设为 false）
+    createMissingPods: false
+    
+    # Pod 信息（namespace、pod name、container）从 webhook 的 metadata 中动态获取
+    # 具体配置在 webhook.yaml 中的用户 metadata 字段
+    
+    # 可选：Shell 命令（persistent 模式下会被 webhook 动态配置）
+    # shellCommand: ["/bin/bash"]
+    
+    # 可选：禁用 ContainerSSH Agent（persistent 模式下建议禁用）
+    # disableAgent: true
+  
+  # 超时配置
+  timeouts:
+    # 命令启动超时
+    commandStart: 60s
+    
+    # 信号发送超时
+    signal: 60s
+    
+    # 窗口大小变更超时
+    window: 60s
+    
+    # 可选：HTTP 调用超时
+    # http: 15s
+
+# 日志配置
+log:
+  # 日志级别：debug, info, warning, error
+  level: info
+  
+  # 日志格式：text, json
+  format: text
+  
+  # 可选：日志输出目标
+  # destination: stdout  # stdout, stderr, 或文件路径
+
+# 可选：指标配置（Prometheus）
+# metrics:
+#   enable: true
+#   path: "/metrics"
